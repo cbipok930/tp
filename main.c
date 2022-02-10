@@ -6,6 +6,7 @@ int main() {
     clock_t begin = clock();
     double step = M_2_PI/99999;
     double sum = 0;
+    //
 #pragma acc data copyin(arr) copyout(sum)
 #pragma acc kernels
     {
