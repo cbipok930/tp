@@ -1,115 +1,129 @@
 #include <stdio.h>
+#include<math.h>
+#include <stdlib.h>
 #include <malloc.h>
-#include <math.h>
-#define N 5
-#define H 1/N
+//#define  N 1024
 
-
-void printSqMtx(double** ptr, int sz){
-    for (int i =0; i < sz; i++){
-        for (int j = 0; j < sz; j++){
-            printf("%g ", ptr[i][j]);
-        }
-        printf("\n");
+int main(int argc, char* argv[]) {
+    int N;
+    int itMAX;
+    double limMAX;
+    if (argc < 4){
+        printf("too few arguments");
+        exit(1);
     }
-    printf("\n");
-}
-
-int main() {
-    double ** u = (double **)malloc(N * sizeof(double*));
-    for (int index=0;index<N;++index)
+    else
     {
-        u[index] = (double *)malloc(N * sizeof(double));
-        for (int i = 0; i < N; ++i) {
-            u[index][i] = 0;
-
+        limMAX = (double)atoi(argv[1]);
+        if ((int)limMAX == 0){
+            printf("incorrect first param");
+            exit(1);
+        }
+        N = atoi(argv[2]);
+        if (N == 0){
+            printf("incorrect second param");
+            exit(1);
+        }
+        itMAX = atoi(argv[3]);
+        if (itMAX == 0){
+            printf("incorrect third param");
+            exit(1);
         }
     }
+    double **u = (double **) calloc(N, sizeof(double *)); // first
 
-    double tau = pow(10, 3);
-    double a = 1;
+    for (int i = 0; i < N; i++) {
+        u[i] = (double *) calloc(N, sizeof(double));
+    }
 
+    double **u_plus = (double **) calloc(N, sizeof(double *));  // second
 
+    for (int j = 0; j < N; j++) {
+        u_plus[j] = (double *) calloc(N, sizeof(double));
+    }
 
-    double ** u_plus = (double **)malloc(N * sizeof(double *));
-    for (int index=0;index<N;++index)
+    u[0][0] = 10.0;
+    u[N - 1][0] = 20.0;
+    u[0][N - 1] = 20.0;
+    u[N - 1][N - 1] = 30.0;
+
+    u_plus[0][0] = 10.0;
+    u_plus[N - 1][0] = 20.0;
+    u_plus[0][N - 1] = 20.0;
+    u_plus[N - 1][N - 1] = 30.0;
+
+    double step = 10.0 / (N - 1);
+    int it = 0;
+    double a = 0.25;
+    double lim = 1;
+
+#pragma acc kernels
+    for (int k = 1; k < N - 1; k++) {
+        u[k][0] = 10 + step * k;
+        u[0][k] = 10 + step * k;
+        u[k][N - 1] = 20 + step * k;
+        u[N - 1][k] = 20 + step * k;
+        u_plus[k][0] = 10 + step * k;
+        u_plus[0][k] = 10 + step * k;
+        u_plus[k][N - 1] = 20 + step * k;
+        u_plus[N - 1][k] = 20 + step * k;
+
+    }
+
+#pragma acc data copy(u[0:N][0:N], lim) create (u_plus[0:N][0:N])
     {
-        u_plus[index] = (double *)malloc(N * sizeof(double ));
-        for (int i = 0; i < N; ++i) {
-            u_plus[index][i] = 0;
+        while (lim > pow(10, -limMAX) && it < pow(10, itMAX)) {
 
-        }
-    }
+            it++;
+            if(it % 100 == 0 ){
+#pragma acc kernels async
+                lim = 0;
+            }
+#pragma acc data present(u, u_plus)
+#pragma acc parallel num_gangs(128) async
+            {
+                if(it % 100 == 0){
 
+#pragma acc loop collapse(2) independent reduction(max:lim)
+                    for (int i = 1; i < N - 1; i++) {
 
-    u[0][0] = 10;
-    u[0][N-1] = 20;
-    u[N-1][0] = 20;
-    u[N-1][N-1] = 30;
-    u_plus[0][0] = 10;
-    u_plus[0][N-1] = 20;
-    u_plus[N-1][0] = 20;
-    u_plus[N-1][N-1] = 30;
-    printSqMtx(u, N);
-    printSqMtx(u_plus, N);
-    for (int i = 1; i < N - 1; i++) {
-        u[0][i] = u[0][0] + (u[0][N - 1] - u[0][0]) / (N - 1) * i;
-        u[i][0] = u[0][0] + (u[N - 1][0] - u[0][0]) / (N - 1) * i;
-        u[N - 1][i] = u[N - 1][0] + (u[N - 1][N - 1] - u[N - 1][0]) / (N - 1) * i;
-        u[i][N - 1] = u[0][N - 1] + (u[N - 1][N - 1] - u[0][N - 1]) / (N - 1) * i;
-    }
-    printSqMtx(u, N);
-    printSqMtx(u_plus, N);
-    for (int i = 1; i < N - 1; i++) {
-        u_plus[0][i] = u_plus[0][0] + (u_plus[0][N - 1] - u_plus[0][0]) / (N - 1) * i;
-        u_plus[i][0] = u_plus[0][0] + (u_plus[N - 1][0] - u_plus[0][0]) / (N - 1) * i;
-        u_plus[N - 1][i] = u_plus[N - 1][0] + (u_plus[N - 1][N - 1] - u_plus[N - 1][0]) / (N - 1) * i;
-        u_plus[i][N - 1] = u_plus[0][N - 1] + (u_plus[N - 1][N - 1] - u_plus[0][N - 1]) / (N - 1) * i;
-    }
-    int num_of_iter = 0;
-    FILE *output = fopen("u_plus.txt", "w");
-    printSqMtx(u, N);
-    printSqMtx(u_plus, N);
-    for (int _ = 0; _ < 133777; ++_) {
+                        for (int j = 1; j < N - 1; j++) {
 
-        double maxdiff;
-        for (int i = 1; i < N - 1; i++) {
-            maxdiff = u[0][0] - u_plus[0][0];
-            for (int j = 1; j < N - 1; j++) {
-                maxdiff = fabs(u[0] - u_plus[0]);
-                u_plus[i][j] = u[i][j] + a * tau * (u[i - 1][j - 1] - 2 * u[i][j] + u[i + 1][j + 1]) / H / H;
-                fprintf(output, "%e ", u_plus[i][j]);
-                if (maxdiff < fabs(u[i][j] - u_plus[i][j]))
-                {
-                    maxdiff = fabs(u[i][j] - u_plus[i][j]);
+                            u_plus[i][j] = a * (u[i + 1][j] + u[i - 1][j] + u[i][j - 1] + u[i][j + 1]);
+                            lim = fmax(lim, u_plus[i][j] - u[i][j]);
+                        }
+                    }
+                }
+                else{
+#pragma acc loop collapse(2)
+
+                    for (int i = 1; i < N - 1; i++) {
+                        for (int j = 1; j < N - 1; j++) {
+
+                            u_plus[i][j] = a * (u[i + 1][j] + u[i - 1][j] + u[i][j - 1] + u[i][j + 1]);
+                        }
+                    }
+
                 }
             }
-            fprintf(output, "\n");
+#pragma acc parallel loop independent collapse(2) async
+            for (int i = 1; i < N - 1; i++) {
+                for (int j = 1; j < N - 1; j++) {
 
-        }
-        printSqMtx(u, N);
-        printSqMtx(u_plus, N);
-        fprintf(output, "maxdiff: %e \n", maxdiff);
-        if (maxdiff < 1.0e-6)
-        {
-            printf ("num of iter: %d", num_of_iter);
-            break;
-        }
-        num_of_iter++;
-        for (int i = 0; i < N; ++i) {
-            for (int j = 0; j < N; ++j) {
-                u[i][j] = u_plus[i][j];
+                    u[i][j] = u_plus[i][j];
+                }
             }
+
+            if(it % 100 == 0 ){
+#pragma acc wait
+#pragma acc update self(lim)
+                printf("%d %e\n", it, lim);
+            }
+
+
         }
     }
 
-    for (int i = 0; i < N; ++i) {
-        for (int j = 0; j < N; ++j) {
-            fprintf(output, "%e ", u[i][j]);
-        }
-        fprintf(output, "\n");
-    }
-    fclose(output);
 
     return 0;
 }
